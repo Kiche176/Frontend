@@ -1,0 +1,303 @@
+openapi: 3.1.0
+info:
+  title: Internal API for Warwick Social App
+  description: |
+    This API handles authentication, events and chats for the Warwick Social App
+  version: 0.0.1
+servers:
+  - url: .../v0
+    description: Production Server
+  - url: .../v0
+    description: Staging environment for testing
+  - url: .../v0
+    description: Development server
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: WSOCookie
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    userDetails:
+      true
+    userId:
+      type: string
+    loginDetails:
+      type: object
+      required: true
+      properties:
+        email:
+          description: |
+            Email of the user attempting to log in
+          type: string
+        password:
+          description: |
+            Password user is attempting to log in with
+          type: string
+          format: password
+    eventId:
+      type: string
+    eventDetails:
+      true
+    bearerToken:
+        type: object
+        properties:
+          token:
+            description: authenticated bearer token
+            type: string
+    chatMessageContent:
+      oneOf:
+        - type: string
+    chatMessage:
+      type: object
+      properties:
+        sender:
+          $ref: "#/components/schemas/userId"
+        content:
+          $ref: "#/components/schemas/chatMessageContent"
+        timeSent:
+          type: string
+          format: date-time
+
+paths:
+  # Login related paths
+  /auth/login:
+    post:
+      summary: Log the user in
+      description: Authenticates the user and returns the token to be used
+      operationId: login
+      requestBody:
+        description: |
+          Login credentials
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/loginDetails"
+      responses:
+        '200':
+          description: Authorised login token returned after successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/bearerToken"
+        '401':
+          description: Invalid credentials provided
+  /auth/logout:
+    delete:
+      summary: Log the user out
+      operationId: logout
+      description: Invalidated the token provided to log in with.
+      security:
+        - cookieAuth: []
+      responses:
+        '205':
+          description: User was successfully deleted and can be logged out
+  /auth/create:
+    post:
+      summary: Create a new account
+      operationId: create-user
+      description: Create an account for new users
+      requestBody:
+        description: |
+          Account credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/loginDetails"
+      responses:
+        '200':
+          description: |
+            Successfully created the account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/bearerToken"
+        '400':
+          description: |
+            Account could not be created
+
+  /auth/verify/{verification_link}:
+    # To be designed once we have emails thought about - frontend doesn't need to worry
+
+  /auth/refresh:
+    post:
+      summary: Refresh cookie using bearer token
+      operationId: refresh-cookie
+      description: Acquire a refreshed cookie for short term auth based on the
+        long term bearer token.
+      responses:
+        '200':
+          description: Bearer is authorised to create a refreshed token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/bearerToken"
+        '401':
+          description: Bearer token is unauthorised/invalid
+
+
+  # Get information about a user
+  /user:
+    get:
+      summary: Get information about users
+      operationId: get-user
+      description: Get information about requested user ids based on the access |
+        the authentication token has. E.G. full access if requesting about |
+        the same user that auth token corresponds to.
+      security:
+        - cookieAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: ids of requested users
+              type: array
+              items:
+                $ref: "#/components/schemas/userId"
+      responses:
+        '200':
+          description: Information about the users
+          content:
+            application/json:
+              schema:
+                description: |
+                  Information about the requested users. If a user |
+                  is included that the current user isn't authorised to know |
+                  about or doesn't exist, only their user id will be returned.
+                type: array
+                items:
+                  $ref: "#/components/schemas/userDetails"
+        '401':
+          description: User is unauthorised to request the data
+
+
+  # Event related paths
+  /event:
+    get:
+      summary: Get information about provided event(s)
+      operationId: get-event
+      description: Get all information the current authorised user is allowed
+        to access about the provided events
+      security:
+        - cookieAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: array of event ids to be processed
+              type: array
+              items:
+                $ref: "#/components/schemas/eventId"
+      responses:
+        '200':
+          description: |
+            Data about the event ids populated with fields that are authorised |
+            to be accessed
+        '401':
+          description: |
+            User is not authorised to access these resources
+    post:
+      summary: Create an event
+      operationId: post-event
+      description: Stores the event provided with the details, if there is
+        some discrepancy an error will be returned and the entire event will
+        not be created
+      security:
+        - cookieAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/eventDetails"
+      responses:
+        '200':
+          description: Event was successfully created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/eventId"
+        '400':
+          description: Error occurred when creating the event.
+        '401':
+          description: User is not authorised to create an event
+    put:
+      summary: Update the provided event
+      operationId: update-event
+      description: Update the event
+      security:
+        - cookieAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              parameters:
+                id:
+                  $ref: "#/components/schemas/eventId"
+                details:
+                  $ref: "#/components/schemas/eventDetails"
+      responses:
+        '200':
+          description: Successfully updated the event
+        '400':
+          description: Server failed to process the event update
+        '401':
+          description: Not authorised to alter the event
+  /event/list:
+    get:
+      summary: Get a list of available events
+      operationId: list-events
+      description: Get a list of all events that the user can see
+      parameters:
+        - in: query
+          name: eventCount
+          schema:
+            type: integer
+          description:
+            Number of events to be returned
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: List of event ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/eventId"
+        '401':
+          description: User is not authorised to see events
+
+  # Event chat related paths
+  /event/chat/{eventId}:
+    get:
+      summary: Post a message to the chat
+      parameters:
+        - in: path
+          name: eventId
+          schema:
+            $ref: "#/components/schemas/eventId"
+          required: true
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Chat messages have been successfully fetched for the chat
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/chatMessage"
+        '401':
+          description: User is not authorised to see these messages
+    post:
+      summary: Post message to chat
+      security:
+        - cookieAuth: []
