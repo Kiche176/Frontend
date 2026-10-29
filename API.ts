@@ -1,4 +1,5 @@
-import { ChatMessage } from "./ChatMessage";
+import { ChatMessage, ChatMessageResponse } from "./Chat";
+import { BearerToken, LoginDetails } from "./Login";
 
 const FOOD_API_URL: string = "https://world.openfoodfacts.net/api/v2/product";
 const API_URL: string = "https://world.openfoodfacts.net/api/v2/product";
@@ -20,7 +21,7 @@ export async function getFoodName(barcode: string): Promise<string[]> {
 
 // GET
 /**
- * Gets a list of information about a
+ * Gets a list of information about a User
  * 
  * @param token 
  * @returns 
@@ -34,6 +35,28 @@ export async function getUser(token: string): Promise<string[]> {
 
     const data = await response.json();
     return data;
+}
+
+/**
+ * Refreshes the session cookie
+ * 
+ * @param token - The 
+ * @returns     - Nothing of relevance
+ */
+export async function refreshSession(token: string) {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Session refresh failed: ${response.status}`);
+    }
+
+    // The cookie may be set automatically by the server response.
+    return response;
 }
 
 export async function getEvent() {
@@ -86,7 +109,7 @@ function eventIdCheck(eventId: string) { return false; } // false for now
 
 // POST
 
-export async function getSessionToken(email: string, password: string) {
+export async function getSessionToken(login: LoginDetails): Promise<BearerToken> {
     const response = await fetch(
         `${URL}/auth/login`,
         {
@@ -96,8 +119,8 @@ export async function getSessionToken(email: string, password: string) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                email: email,
-                password: password
+                email: login.email,
+                password: login.password
             })
         }
     );
@@ -108,11 +131,11 @@ export async function getSessionToken(email: string, password: string) {
         );
     }
 
-    const data =  await response.json();
-    return data.token;
+    const data = await response.json();
+    return {token: data};
 }
 
-export async function registerUser(email: string, password: string) {
+export async function registerUser(login: LoginDetails) {
     const response = await fetch(
         `${URL}/auth/create`,
         {
@@ -122,8 +145,8 @@ export async function registerUser(email: string, password: string) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                email: email,
-                password: password
+                email: login.email,
+                password: login.password
             })
         }
     );
